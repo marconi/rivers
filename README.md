@@ -44,7 +44,7 @@ Requires the following environment variables:
 
 ## Running Tests
 
-Tests can be run with Docker using fig:
+Tests can be run with [Docker](http://www.docker.com) using [Fig](http://www.fig.sh):
 
 ```sh
 $ fig run --rm test
