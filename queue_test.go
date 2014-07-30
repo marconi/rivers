@@ -12,15 +12,6 @@ import (
 )
 
 func TestQueue(t *testing.T) {
-	// run test on db 1
-	var origRedisDb = REDIS_DB
-	REDIS_DB = 1
-
-	// then rese tit back after this suite
-	defer func() {
-		REDIS_DB = origRedisDb
-	}()
-
 	Convey("given an urgent queue", t, func() {
 		Convey("should have a name", func() {
 			uq1 := NewQueue("uq1", "urgent")
@@ -419,7 +410,7 @@ func TestQueue(t *testing.T) {
 			conn := Pool.Get()
 			scoresMap := GetQueueScores(dq5.(DelayedQueue).GetIndexName(), conn)
 
-			err := dq5.(DelayedQueue).TickTock()
+			err := dq5.(DelayedQueue).TickTock(NewNonPool())
 			So(err, ShouldEqual, nil)
 
 			newScoresMap := GetQueueScores(dq5.(DelayedQueue).GetIndexName(), conn)
@@ -460,18 +451,18 @@ func TestQueue(t *testing.T) {
 		})
 
 		Convey("should be able to multi-pop", func() {
-			j1 := NewJob(time.Now().UTC().Add(1 * time.Second))
-			j2 := NewJob(time.Now().UTC().Add(2 * time.Second))
-
 			dquq2 := NewQueue("dquq2", "urgent")
 			dq7 := NewQueue("dq7", "delayed")
-			dq7.Push(j1)
-			dq7.Push(j2)
+			dq7.Push(NewJob(time.Now().UTC()))
+			dq7.Push(NewJob(time.Now().UTC()))
 
-			size, _ := dq7.GetSize()
+			time.Sleep(1 * time.Second)
+
+			size, err := dq7.GetSize()
+			So(err, ShouldEqual, nil)
 			So(size, ShouldEqual, 2)
 
-			jobs, err := dq7.(DelayedQueue).MultiPop([]string{j1.GetId(), j2.GetId()})
+			jobs, err := dq7.(DelayedQueue).MultiPop()
 
 			So(jobs, ShouldNotEqual, nil)
 			So(err, ShouldEqual, nil)
