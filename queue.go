@@ -44,8 +44,8 @@ type UrgentQueue interface {
 type DelayedQueue interface {
 	GetStoreName() string
 	GetIndexName() string
-	TickTock() error
-	MultiPop(jobIds []string) ([]Job, error)
+	TickTock(conn redis.Conn) error
+	MultiPop() ([]Job, error)
 }
 
 // Queue for popped jobs but haven't been acknowledged
@@ -389,10 +389,20 @@ func (q *delayedQueue) Pop() (Job, error) {
 	return j, nil
 }
 
-func (q *delayedQueue) MultiPop(jobIds []string) ([]Job, error) {
-	q.conn.Send("MULTI")
+func (q *delayedQueue) MultiPop() ([]Job, error) {
+	// get all zero scored jobs
+	jobIds, err := redis.Strings(q.conn.Do("ZRANGEBYSCORE", q.GetIndexName(), 0, 0))
+	if err != nil {
+		return nil, err
+	}
 
+	// NOTE: Single transaction should be good here
+	// but for some reason the redis client can't handle
+	// multi-multi return values from single transaction.
+	// Something to look into.
+	var jobs []Job
 	for _, id := range jobIds {
+		q.conn.Send("MULTI")
 		// remove from the index
 		q.conn.Send("ZREM", q.GetIndexName(), id)
 
@@ -401,18 +411,14 @@ func (q *delayedQueue) MultiPop(jobIds []string) ([]Job, error) {
 
 		// and then remove from the store
 		q.conn.Send("HDEL", q.GetStoreName(), id)
-	}
-	r, err := redis.Values(q.conn.Do("EXEC"))
-	if err != nil {
-		return nil, err
-	}
 
-	var jobs []Job
-	for index, _ := range r {
-		if (index+1)%3 == 0 {
+		r, err := redis.Values(q.conn.Do("EXEC"))
+		if err != nil {
+			log.Println("error popping job", id+":", err)
+		} else {
 			j := new(JobItem)
-			if err := j.Unmarshal(r[index-1].([]byte)); err != nil {
-				log.Println("unable to unmarshal job:", err)
+			if err := j.Unmarshal(r[1].([]byte)); err != nil {
+				log.Println("unable to unmarshal job", id+":", err)
 			}
 			jobs = append(jobs, j)
 		}
@@ -449,13 +455,13 @@ func (q *delayedQueue) Destroy() error {
 		return err
 	}
 
-	close(q.quitClock)
+	// close(q.quitClock)
 	q.Close()
 	return nil
 }
 
 // Decrements all jobs' score by one
-func (q *delayedQueue) TickTock() error {
+func (q *delayedQueue) TickTock(conn redis.Conn) error {
 	// if ticktock is running, don't run another one
 	if q.isTicking {
 		return nil
@@ -473,26 +479,18 @@ func (q *delayedQueue) TickTock() error {
 	//
 	// NOTE: loading all ids into memory might be an overhead
 	// if the set is big, ZSCAN might be able to help on this
-	idToScore := GetQueueScores(q.GetIndexName(), q.conn)
+	idToScore := GetQueueScores(q.GetIndexName(), conn)
 
 	// decrement each job's score
-	var expiredJobIds []string
-	q.conn.Send("MULTI")
+	conn.Send("MULTI")
 	for id, score := range idToScore {
 		// only decrement scores > zero so we
 		// don't ran into negative scores
 		if score > 0 {
-			q.conn.Send("ZINCRBY", q.GetIndexName(), -1, id)
-		}
-
-		// if score is already zero are about to become zero,
-		// collect its job ids so we can bulk pop and push
-		// them to urgent queue.
-		if score <= 1 {
-			expiredJobIds = append(expiredJobIds, id)
+			conn.Send("ZINCRBY", q.GetIndexName(), -1, id)
 		}
 	}
-	if _, err := q.conn.Do("EXEC"); err != nil {
+	if _, err := conn.Do("EXEC"); err != nil {
 		return err
 	}
 
@@ -501,13 +499,17 @@ func (q *delayedQueue) TickTock() error {
 
 // Starts the ticker which moves jobs from delayed to urgent queue
 func (q *delayedQueue) startTicker() {
-	ticker := time.NewTicker(time.Duration(TICKTOCK_INTERVAL) * time.Second) // tick every second
+	// redigo doesn't support concurrency on polled connection
+	tickerConn := NewNonPool()
+
+	// tick every second
+	ticker := time.NewTicker(time.Duration(TICKTOCK_INTERVAL) * time.Second)
 	q.quitClock = make(chan bool)
 	go func() {
 		for {
 			select {
 			case <-ticker.C:
-				if err := q.TickTock(); err != nil {
+				if err := q.TickTock(tickerConn); err != nil {
 					log.Println("Ticker unable to tock:", err)
 				}
 			case <-q.quitClock:
