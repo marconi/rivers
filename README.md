@@ -42,6 +42,14 @@ Requires the following environment variables:
 - RIVERS_REDIS_DB
 - RIVERS_REDIS_PASSWORD
 
+## Running Tests
+
+Tests can be run with Docker using fig:
+
+```sh
+$ fig run --rm test
+```
+
 ## Status
 - Not used in any real project yet
 - Coverage is at 82.7%
