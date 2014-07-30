@@ -1,6 +1,7 @@
 package rivers
 
 import (
+	"fmt"
 	"os"
 	"time"
 
@@ -8,14 +9,26 @@ import (
 )
 
 var (
-	redisHost = ":6379"
+	redisHost = "localhost"
+	redisPort = "6379"
+	redisAddr = ""	
 	redisDb   = "0"
 	redisPass = ""
 	Pool      *redis.Pool
 )
 
 func init() {
-	redisDb := os.Getenv("RIVERS_REDIS_DB")
+	envRedisHost := os.Getenv("RIVERS_REDIS_HOST")
+	if envRedisHost != "" {
+		redisHost = envRedisHost
+	}
+	envRedisPort := os.Getenv("RIVERS_REDIS_PORT")
+	if envRedisPort != "" {
+		redisPort = envRedisPort
+	}
+	redisAddr = fmt.Sprintf("%s:%s", redisHost, redisPort)
+
+	redisDb = os.Getenv("RIVERS_REDIS_DB")
 	redisPass = os.Getenv("RIVERS_REDIS_PASSWORD")
 
 	if redisDb == "" {
@@ -27,7 +40,7 @@ func init() {
 
 func dial() (redis.Conn, error) {
 	// dial redis server
-	c, err := redis.Dial("tcp", redisHost)
+	c, err := redis.Dial("tcp", redisAddr)
 	if err != nil {
 		return nil, err
 	}
