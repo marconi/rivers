@@ -37,8 +37,10 @@ Both queue supports 2 hours age of per second stats of the following:
 
 Requires the following environment variables:
 
-- `RIVERS_REDIS_DB`
-- `RIVERS_REDIS_PASSWORD`
+- RIVERS_REDIS_HOST
+- RIVERS_REDIS_PORT
+- RIVERS_REDIS_DB
+- RIVERS_REDIS_PASSWORD
 
 ## Status
 - Not used in any real project yet
