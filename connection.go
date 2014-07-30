@@ -11,7 +11,7 @@ import (
 var (
 	redisHost = "localhost"
 	redisPort = "6379"
-	redisAddr = ""	
+	redisAddr = ""
 	redisDb   = "0"
 	redisPass = ""
 	Pool      *redis.Pool
@@ -28,12 +28,12 @@ func init() {
 	}
 	redisAddr = fmt.Sprintf("%s:%s", redisHost, redisPort)
 
-	redisDb = os.Getenv("RIVERS_REDIS_DB")
-	redisPass = os.Getenv("RIVERS_REDIS_PASSWORD")
-
-	if redisDb == "" {
-		panic("missing RIVERS_REDIS_DB envar")
+	envRedisDb := os.Getenv("RIVERS_REDIS_DB")
+	if redisDb != "" {
+		redisDb = envRedisDb
 	}
+
+	redisPass = os.Getenv("RIVERS_REDIS_PASSWORD")
 
 	Pool = newPool()
 }
