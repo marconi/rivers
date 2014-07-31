@@ -37,8 +37,18 @@ Both queue supports 2 hours age of per second stats of the following:
 
 Requires the following environment variables:
 
+- `RIVERS_REDIS_HOST`
+- `RIVERS_REDIS_PORT`
 - `RIVERS_REDIS_DB`
 - `RIVERS_REDIS_PASSWORD`
+
+## Running Tests
+
+Tests can be run with [Docker](http://www.docker.com) using [Fig](http://www.fig.sh):
+
+```sh
+$ fig run --rm test
+```
 
 ## Status
 - Not used in any real project yet
