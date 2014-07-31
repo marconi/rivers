@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/beego/redigo/redis"
+	"github.com/garyburd/redigo/redis"
 	. "github.com/smartystreets/goconvey/convey"
 
 	. "github.com/marconi/rivers"
