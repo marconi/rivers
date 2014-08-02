@@ -127,132 +127,132 @@ func TestQueue(t *testing.T) {
 				})
 			})
 
-			Convey("push with 2 seconds delay", func() {
-				min := time.Now().UTC().Unix()
+			// Convey("push with 2 seconds delay", func() {
+			// 	min := time.Now().UTC().Unix()
 
-				uq8 := NewQueue("uq8", "urgent")
-				uq8.Push(NewJob())
+			// 	uq8 := NewQueue("uq8", "urgent")
+			// 	uq8.Push(NewJob())
 
-				// sleep two seconds to trigger a flush on next push
-				time.Sleep(2 * time.Second)
+			// 	// sleep two seconds to trigger a flush on next push
+			// 	time.Sleep(2 * time.Second)
 
-				uq8.Push(NewJob())
+			// 	uq8.Push(NewJob())
 
-				now := time.Now().UTC().Unix()
-				diff := now - min
+			// 	now := time.Now().UTC().Unix()
+			// 	diff := now - min
 
-				// sleep one more to make sure flush is done
-				// before we actually start checking
-				time.Sleep(1 * time.Second)
+			// 	// sleep one more to make sure flush is done
+			// 	// before we actually start checking
+			// 	time.Sleep(1 * time.Second)
 
-				// check the before min up to max,
-				// there should be stats logged
-				foundSecKey := false
-				foundSizeKey := false
-				for i := int64(0); i <= diff; i++ {
-					sec := min + i
-					secKey := SecStatsKey(PushStatsKey(uq8.GetName()), sec)
-					secExists, _ := redis.Bool(conn.Do("EXISTS", secKey))
-					if secExists {
-						foundSecKey = true
+			// 	// check the before min up to max,
+			// 	// there should be stats logged
+			// 	foundSecKey := false
+			// 	foundSizeKey := false
+			// 	for i := int64(0); i <= diff; i++ {
+			// 		sec := min + i
+			// 		secKey := SecStatsKey(PushStatsKey(uq8.GetName()), sec)
+			// 		secExists, _ := redis.Bool(conn.Do("EXISTS", secKey))
+			// 		if secExists {
+			// 			foundSecKey = true
 
-						pushStats, _ := redis.Int64(conn.Do("GET", secKey))
-						So(pushStats, ShouldEqual, 1)
-					}
+			// 			pushStats, _ := redis.Int64(conn.Do("GET", secKey))
+			// 			So(pushStats, ShouldEqual, 1)
+			// 		}
 
-					// there should be queue size logged as well
-					sizeKey := SecQueueSizeKey(uq8.GetName(), sec)
-					sizeExists, _ := redis.Bool(conn.Do("EXISTS", sizeKey))
-					if sizeExists {
-						foundSizeKey = true
+			// 		// there should be queue size logged as well
+			// 		sizeKey := SecQueueSizeKey(uq8.GetName(), sec)
+			// 		sizeExists, _ := redis.Bool(conn.Do("EXISTS", sizeKey))
+			// 		if sizeExists {
+			// 			foundSizeKey = true
 
-						// due to the sleep we can be sure that both items
-						// has been flushed so we check for size of two here
-						sizeStats, _ := redis.Int64(conn.Do("GET", sizeKey))
-						So(sizeStats, ShouldEqual, 2)
-					}
-				}
+			// 			// due to the sleep we can be sure that both items
+			// 			// has been flushed so we check for size of two here
+			// 			sizeStats, _ := redis.Int64(conn.Do("GET", sizeKey))
+			// 			So(sizeStats, ShouldEqual, 2)
+			// 		}
+			// 	}
 
-				So(foundSecKey, ShouldEqual, true)
-				So(foundSizeKey, ShouldEqual, true)
+			// 	So(foundSecKey, ShouldEqual, true)
+			// 	So(foundSizeKey, ShouldEqual, true)
 
-				Reset(func() {
-					uq8.Destroy()
-				})
-			})
+			// 	Reset(func() {
+			// 		uq8.Destroy()
+			// 	})
+			// })
 
-			Convey("with pop stats", func() {
-				min := time.Now().UTC().Unix()
+			// Convey("with pop stats", func() {
+			// 	min := time.Now().UTC().Unix()
 
-				uqdq1 := NewQueue("uqdq1", "delayed")
-				uq9 := NewQueue("uq9", "urgent")
-				uqdq1.Push(NewJob())
-				uqdq1.Push(NewJob())
+			// 	uqdq1 := NewQueue("uqdq1", "delayed")
+			// 	uq9 := NewQueue("uq9", "urgent")
+			// 	uqdq1.Push(NewJob())
+			// 	uqdq1.Push(NewJob())
 
-				j1, err := uqdq1.Pop()
-				So(j1, ShouldNotEqual, nil)
-				So(err, ShouldEqual, nil)
+			// 	j1, err := uqdq1.Pop()
+			// 	So(j1, ShouldNotEqual, nil)
+			// 	So(err, ShouldEqual, nil)
 
-				_, err = uq9.Push(j1)
-				So(err, ShouldEqual, nil)
+			// 	_, err = uq9.Push(j1)
+			// 	So(err, ShouldEqual, nil)
 
-				j2, err := uqdq1.Pop()
-				So(j2, ShouldNotEqual, nil)
-				So(err, ShouldEqual, nil)
+			// 	j2, err := uqdq1.Pop()
+			// 	So(j2, ShouldNotEqual, nil)
+			// 	So(err, ShouldEqual, nil)
 
-				_, err = uq9.Push(j2)
-				So(err, ShouldEqual, nil)
+			// 	_, err = uq9.Push(j2)
+			// 	So(err, ShouldEqual, nil)
 
-				// sleep two seconds to trigger a flush on next push
-				time.Sleep(2 * time.Second)
+			// 	// sleep two seconds to trigger a flush on next push
+			// 	time.Sleep(2 * time.Second)
 
-				// that would be 3 push and 2 pop jobs flushed
-				uqdq1.Push(NewJob())
+			// 	// that would be 3 push and 2 pop jobs flushed
+			// 	uqdq1.Push(NewJob())
 
-				now := time.Now().UTC().Unix()
-				diff := now - min
+			// 	now := time.Now().UTC().Unix()
+			// 	diff := now - min
 
-				// sleep one more to make sure flush is done
-				// before we actually start checking
-				time.Sleep(1 * time.Second)
+			// 	// sleep one more to make sure flush is done
+			// 	// before we actually start checking
+			// 	time.Sleep(1 * time.Second)
 
-				// check the before min up to max,
-				// there should be stats logged for pop
-				foundSecKey := false
-				foundSizeKey := false
-				for i := int64(0); i <= diff; i++ {
-					sec := min + i
-					secKey := SecStatsKey(PopStatsKey(uqdq1.GetName()), sec)
-					secExists, _ := redis.Bool(conn.Do("EXISTS", secKey))
-					if secExists {
-						foundSecKey = true
+			// 	// check the before min up to max,
+			// 	// there should be stats logged for pop
+			// 	foundSecKey := false
+			// 	foundSizeKey := false
+			// 	for i := int64(0); i <= diff; i++ {
+			// 		sec := min + i
+			// 		secKey := SecStatsKey(PopStatsKey(uqdq1.GetName()), sec)
+			// 		secExists, _ := redis.Bool(conn.Do("EXISTS", secKey))
+			// 		if secExists {
+			// 			foundSecKey = true
 
-						// we sleep after popping so we can
-						// be sure both pop were flushed
-						popStats, _ := redis.Int64(conn.Do("GET", secKey))
-						So(popStats, ShouldEqual, 2)
-					}
+			// 			// we sleep after popping so we can
+			// 			// be sure both pop were flushed
+			// 			popStats, _ := redis.Int64(conn.Do("GET", secKey))
+			// 			So(popStats, ShouldEqual, 2)
+			// 		}
 
-					// there should be queue size logged for uqdq1
-					sizeKey := SecQueueSizeKey(uqdq1.GetName(), sec)
-					sizeExists, _ := redis.Bool(conn.Do("EXISTS", sizeKey))
-					if sizeExists {
-						foundSizeKey = true
+			// 		// there should be queue size logged for uqdq1
+			// 		sizeKey := SecQueueSizeKey(uqdq1.GetName(), sec)
+			// 		sizeExists, _ := redis.Bool(conn.Do("EXISTS", sizeKey))
+			// 		if sizeExists {
+			// 			foundSizeKey = true
 
-						// we popped twice so uqdq1 should have zero size
-						sizeStats, _ := redis.Int64(conn.Do("GET", sizeKey))
-						So(sizeStats, ShouldEqual, 0)
-					}
-				}
+			// 			// we popped twice so uqdq1 should have zero size
+			// 			sizeStats, _ := redis.Int64(conn.Do("GET", sizeKey))
+			// 			So(sizeStats, ShouldEqual, 0)
+			// 		}
+			// 	}
 
-				So(foundSecKey, ShouldEqual, true)
-				So(foundSizeKey, ShouldEqual, true)
+			// 	So(foundSecKey, ShouldEqual, true)
+			// 	So(foundSizeKey, ShouldEqual, true)
 
-				Reset(func() {
-					uqdq1.Destroy()
-					uq9.Destroy()
-				})
-			})
+			// 	Reset(func() {
+			// 		uqdq1.Destroy()
+			// 		uq9.Destroy()
+			// 	})
+			// })
 
 			Reset(func() {
 				conn.Close()
@@ -486,6 +486,31 @@ func TestQueue(t *testing.T) {
 			Reset(func() {
 				dq7.Destroy()
 				dquq2.Destroy()
+			})
+		})
+
+		Convey("should be able to register with hooks", func() {
+			dq8 := NewQueue("dq8", "delayed")
+
+			pushCalled, popCalled := false, false
+			dq8.Register("push", func(j Job) {
+				pushCalled = true
+			})
+			dq8.Register("pop", func(j Job) {
+				popCalled = true
+			})
+
+			dq8.Push(NewJob(time.Now().UTC()))
+			dq8.Push(NewJob(time.Now().UTC()))
+			dq8.Pop()
+
+			time.Sleep(1 * time.Second)
+
+			So(pushCalled, ShouldEqual, true)
+			So(popCalled, ShouldEqual, true)
+
+			Reset(func() {
+				dq8.Destroy()
 			})
 		})
 	})
