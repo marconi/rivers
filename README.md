@@ -33,6 +33,22 @@ Both queue supports 2 hours age of per second stats of the following:
 - Ack
 - Size
 
+## Hooks
+
+You can register a handler on the queues to react on certain events like popping, pushing, acking, etc. like:
+
+```go
+q := NewQueue("acheron", "delayed")
+q.Register("push", func(j Job) {
+    // do something
+})
+q.Register("pop", func(j Job) {
+    // do something
+})
+```
+
+Each event will have a set of arguments to be pass on the handler, still unstable and need to be documented. You can use these hooks to register [Scylla](https://github.com/marconi/scylla), a stats logger.
+
 ## Requirements
 
 Requires the following environment variables:
@@ -55,7 +71,6 @@ $ fig run --rm test
 - Coverage is at 82.7%
 
 ## TODO
-- [Ferryman](https://github.com/marconi/ferryman)
 - Offer way to easily access stats
 - Decouple stats logger from the queues via hooks
 
