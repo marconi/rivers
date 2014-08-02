@@ -38,14 +38,14 @@ type Queue interface {
 
 type UrgentQueue interface {
 	GetUnackQueue() Collection
-	MultiPush(jobs []Job) (int64, error)
+	MultiPush(jobs []Job, conn ...redis.Conn) (int64, error)
 }
 
 type DelayedQueue interface {
 	GetStoreName() string
 	GetIndexName() string
 	TickTock(conn redis.Conn) error
-	MultiPop() ([]Job, error)
+	MultiPop(conn ...redis.Conn) ([]Job, error)
 }
 
 // Queue for popped jobs but haven't been acknowledged
@@ -124,7 +124,19 @@ func (q *urgentQueue) Push(j Job) (int64, error) {
 }
 
 // Pushes multiple jobs to queue
-func (q *urgentQueue) MultiPush(jobs []Job) (int64, error) {
+func (q *urgentQueue) MultiPush(jobs []Job, conn ...redis.Conn) (int64, error) {
+	// default connection to the polled one from the queue
+	qconn := q.conn
+
+	// if a connection has been passed, override default connection
+	// this is because using MultiPush with default connection
+	// inside goroutine wouldn't work due to polled-connection
+	// not supporting concurrency. This way client can pass non-pooled
+	// connection for override.
+	if len(conn) > 0 {
+		qconn = conn[0]
+	}
+
 	// encode all jobs
 	var marshaledJobs [][]byte
 	for _, j := range jobs {
@@ -133,11 +145,11 @@ func (q *urgentQueue) MultiPush(jobs []Job) (int64, error) {
 	}
 
 	// push them all at once
-	q.conn.Send("MULTI")
+	qconn.Send("MULTI")
 	for _, data := range marshaledJobs {
-		q.conn.Send("LPUSH", q.GetName(), data)
+		qconn.Send("LPUSH", q.GetName(), data)
 	}
-	r, err := redis.Values(q.conn.Do("EXEC"))
+	r, err := redis.Values(qconn.Do("EXEC"))
 	if err != nil {
 		return 0, err
 	}
@@ -389,9 +401,22 @@ func (q *delayedQueue) Pop() (Job, error) {
 	return j, nil
 }
 
-func (q *delayedQueue) MultiPop() ([]Job, error) {
+// Pops multiple zero-scored jobs from the queue
+func (q *delayedQueue) MultiPop(conn ...redis.Conn) ([]Job, error) {
+	// default connection to the polled one from the queue
+	qconn := q.conn
+
+	// if a connection has been passed, override default connection
+	// this is because using MultiPop with default connection
+	// inside goroutine wouldn't work due to polled-connection
+	// not supporting concurrency. This way client can pass non-pooled
+	// connection for override.
+	if len(conn) > 0 {
+		qconn = conn[0]
+	}
+
 	// get all zero scored jobs
-	jobIds, err := redis.Strings(q.conn.Do("ZRANGEBYSCORE", q.GetIndexName(), 0, 0))
+	jobIds, err := redis.Strings(qconn.Do("ZRANGEBYSCORE", q.GetIndexName(), 0, 0))
 	if err != nil {
 		return nil, err
 	}
@@ -402,17 +427,17 @@ func (q *delayedQueue) MultiPop() ([]Job, error) {
 	// Something to look into.
 	var jobs []Job
 	for _, id := range jobIds {
-		q.conn.Send("MULTI")
+		qconn.Send("MULTI")
 		// remove from the index
-		q.conn.Send("ZREM", q.GetIndexName(), id)
+		qconn.Send("ZREM", q.GetIndexName(), id)
 
 		// retrieve data from store
-		q.conn.Send("HGET", q.GetStoreName(), id)
+		qconn.Send("HGET", q.GetStoreName(), id)
 
 		// and then remove from the store
-		q.conn.Send("HDEL", q.GetStoreName(), id)
+		qconn.Send("HDEL", q.GetStoreName(), id)
 
-		r, err := redis.Values(q.conn.Do("EXEC"))
+		r, err := redis.Values(qconn.Do("EXEC"))
 		if err != nil {
 			log.Println("error popping job", id+":", err)
 		} else {
@@ -455,7 +480,7 @@ func (q *delayedQueue) Destroy() error {
 		return err
 	}
 
-	// close(q.quitClock)
+	close(q.quitClock)
 	q.Close()
 	return nil
 }
@@ -500,6 +525,7 @@ func (q *delayedQueue) TickTock(conn redis.Conn) error {
 // Starts the ticker which moves jobs from delayed to urgent queue
 func (q *delayedQueue) startTicker() {
 	// redigo doesn't support concurrency on polled connection
+	// see https://github.com/garyburd/redigo/issues/73
 	tickerConn := NewNonPool()
 
 	// tick every second
@@ -514,6 +540,7 @@ func (q *delayedQueue) startTicker() {
 				}
 			case <-q.quitClock:
 				ticker.Stop()
+				tickerConn.Close()
 				return
 			}
 		}
