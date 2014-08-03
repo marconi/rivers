@@ -31,11 +31,6 @@ type Queue interface {
 	Push(j Job) (int64, error)
 	Pop() (Job, error)
 	Register(name string, handlerFunc interface{})
-
-	// stats related methods
-	// logStats(name string, n int64)
-	// startStatsLogger()
-	// flushStats(now int64)
 }
 
 type UrgentQueue interface {
@@ -88,10 +83,7 @@ func (q *unackQueue) remove(j Job) error {
 // Queue for urgent jobs that needs to be process immediately
 type urgentQueue struct {
 	unackQueue
-	currentQueue   *unackQueue
-	statsChan      chan (*statsLog)
-	statsCache     map[int64]map[string]int64
-	lastStatsFlush int64
+	currentQueue *unackQueue
 
 	// hooks mapping
 	hooks map[string][]interface{}
@@ -145,9 +137,6 @@ func (q *urgentQueue) Push(j Job) (int64, error) {
 		return 0, err
 	}
 
-	// increment push stats by one
-	// TODO: move logging stats to another package via hooks
-	// q.logStats(PushStatsKey(q.GetName()), 1)
 	q.runHooks("push", j)
 
 	return n.(int64), nil
@@ -184,9 +173,6 @@ func (q *urgentQueue) MultiPush(jobs []Job, conn ...redis.Conn) (int64, error) {
 		return 0, err
 	}
 
-	// increment push stats by one
-	// TODO: move logging stats to another package via hooks
-	// q.logStats(PushStatsKey(q.GetName()), int64(len(jobs)))
 	q.runHooks("multipush", jobs)
 
 	return r[len(r)-1].(int64), nil
@@ -218,9 +204,6 @@ func (q *urgentQueue) Pop() (Job, error) {
 		return nil, err
 	}
 
-	// increment pop stats by one
-	// TODO: move logging stats to another package via hooks
-	// q.logStats(PopStatsKey(q.GetName()), 1)
 	q.runHooks("pop", j)
 
 	// then return popped item
@@ -234,9 +217,6 @@ func (q *urgentQueue) Ack(j Job) error {
 		return err
 	}
 
-	// increment ack stats by one
-	// TODO: move logging stats to another package via hooks
-	// q.logStats(AckStatsKey(q.GetName()), 1)
 	q.runHooks("ack", j)
 
 	return nil
@@ -274,80 +254,12 @@ func (q *urgentQueue) Destroy() error {
 		return err
 	}
 
-	// close channels
-	// close(q.statsChan)
-
 	// close queues
 	q.currentQueue.Close()
 	q.Close()
 
 	return nil
 }
-
-// func (q *urgentQueue) logStats(name string, n int64) {
-// 	l := &statsLog{name: name, value: n}
-// 	q.statsChan <- l
-// }
-
-// func (q *urgentQueue) startStatsLogger() {
-// 	// allocate the cache and channel
-// 	q.statsCache = make(map[int64]map[string]int64)
-// 	q.statsChan = make(chan *statsLog, 1024)
-
-// 	writing := false
-// 	go func() {
-// 		for l := range q.statsChan {
-// 			now := time.Now().UTC().Unix()
-
-// 			// if now doesn't have a cache yet, allocate one
-// 			if _, ok := q.statsCache[now]; !ok {
-// 				q.statsCache[now] = make(map[string]int64)
-// 			}
-
-// 			// increment logged stats' value
-// 			q.statsCache[now][l.name] += l.value
-
-// 			// if we have accumulated some stats and its safe
-// 			// to write, flush the stats cache.
-// 			if now > q.lastStatsFlush && !writing {
-// 				writing = true
-// 				q.flushStats(now)
-// 				writing = false
-// 			}
-// 		}
-// 	}()
-// }
-
-// func (q *urgentQueue) flushStats(now int64) {
-// 	for sec, cache := range q.statsCache {
-// 		// only flush caches older than 2 seconds
-// 		if sec >= now-1 {
-// 			continue
-// 		}
-
-// 		for name, value := range cache {
-// 			secKey := SecStatsKey(name, sec)
-// 			q.conn.Send("MULTI")
-// 			q.conn.Send("INCRBY", secKey, value)
-// 			q.conn.Send("EXPIRE", secKey, 7200)
-// 			if _, err := q.conn.Do("EXEC"); err != nil {
-// 				log.Println("unable to increment flushed stats for %s:", name, err)
-// 				continue
-// 			}
-// 		}
-
-// 		// also log queue lengths to expire in two hours
-// 		sizeKey := SecQueueSizeKey(q.GetName(), sec)
-// 		size, err := q.GetSize()
-// 		if _, err = q.conn.Do("SETEX", sizeKey, 7200, size); err != nil {
-// 			log.Println("unable to log queue size:", err)
-// 		}
-
-// 		// delete this second's cache
-// 		delete(q.statsCache, sec)
-// 	}
-// 	q.lastStatsFlush = now
-// }
 
 // Queue for jobs with schedule
 type delayedQueue struct {
@@ -378,10 +290,6 @@ func (q *delayedQueue) Push(j Job) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-
-	// increment push stats by one
-	// TODO: move logging stats to another package via hooks
-	// q.logStats(PushStatsKey(q.GetName()), 1)
 
 	// invoke registered handlers
 	q.runHooks("push", j)
@@ -434,10 +342,6 @@ func (q *delayedQueue) Pop() (Job, error) {
 	if err = j.Unmarshal(r[1].([]byte)); err != nil {
 		return nil, err
 	}
-
-	// increment pop stats by one
-	// TODO: move logging stats to another package via hooks
-	// q.logStats(PopStatsKey(q.GetName()), 1)
 
 	// invoke registered handlers
 	q.runHooks("pop", j)
@@ -624,9 +528,6 @@ func NewQueue(name, qtype string) Queue {
 	default:
 		panic("invalid queue type")
 	}
-
-	// spawn the stats logger for this queue
-	// q.startStatsLogger()
 
 	return q
 }
